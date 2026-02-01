@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Aggiungiamo i permessi espliciti per scrivere nel repo
+    permissions:
+      contents: write
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -23,15 +27,22 @@ jobs:
       - name: Esegui Scraper
         run: python scraper.py
 
-- name: Salva il JSON nel repository
+      - name: Salva il JSON nel repository
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          # Se il file esiste, lo aggiunge. Se non esiste, non succede nulla.
+          
+          # Controllo se il file è stato creato dallo script python
           if [ -f dati_fantacalcio.json ]; then
             git add dati_fantacalcio.json
-            # Commit solo se ci sono cambiamenti effettivi
-            git diff --quiet && git diff --staged --quiet || (git commit -m "Aggiornamento dati: $(date)" && git push)
+            # Esegue il commit solo se il file è diverso dal precedente
+            if ! git diff --cached --quiet; then
+              git commit -m "Aggiornamento dati: $(date)"
+              git push
+            else
+              echo "Nessuna variazione nei dati, salto il push."
+            fi
           else
-            echo "File non trovato, salto il salvataggio."
+            echo "Errore: dati_fantacalcio.json non trovato!"
+            exit 1
           fi
