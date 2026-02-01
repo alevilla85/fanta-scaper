@@ -23,10 +23,15 @@ jobs:
       - name: Esegui Scraper
         run: python scraper.py
 
-      - name: Salva il JSON nel repository
+- name: Salva il JSON nel repository
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add dati_fantacalcio.json
-          git commit -m "Aggiornamento dati fanta: $(date)" || echo "Nessuna modifica rilevata"
-          git push
+          # Se il file esiste, lo aggiunge. Se non esiste, non succede nulla.
+          if [ -f dati_fantacalcio.json ]; then
+            git add dati_fantacalcio.json
+            # Commit solo se ci sono cambiamenti effettivi
+            git diff --quiet && git diff --staged --quiet || (git commit -m "Aggiornamento dati: $(date)" && git push)
+          else
+            echo "File non trovato, salto il salvataggio."
+          fi
