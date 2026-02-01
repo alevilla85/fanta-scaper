@@ -1,26 +1,32 @@
-name: Aggiornamento Quotidiano Fanta
+name: Aggiornamento Dati Fanta
+
 on:
   schedule:
-    - cron: '0 4 * * *' # Gira ogni giorno alle 4 di mattina
-  workflow_dispatch: # Permette anche il lancio manuale
+    - cron: '0 4 * * *' # Ogni notte alle 04:00
+  workflow_dispatch:   # Permette il lancio manuale
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
-      - name: Install dependencies
+          python-version: '3.9'
+
+      - name: Installa dipendenze
         run: pip install requests
-      - name: Run scraper
+
+      - name: Esegui Scraper
         run: python scraper.py
-      - name: Upload to Google Drive
-        # Qui useremo un'azione pronta per caricare su Drive
-        uses: Jambo-Software/upload-google-drive@v1.1
-        with:
-          google-source: 'dati_fantacalcio.json'
-          google-drive-id: '${{ secrets.DRIVE_FILE_ID }}'
-          google-service-account-json: '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}'
+
+      - name: Salva il JSON nel repository
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add dati_fantacalcio.json
+          git commit -m "Aggiornamento dati fanta: $(date)" || echo "Nessuna modifica rilevata"
+          git push
