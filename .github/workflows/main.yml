@@ -1,0 +1,26 @@
+name: Aggiornamento Quotidiano Fanta
+on:
+  schedule:
+    - cron: '0 4 * * *' # Gira ogni giorno alle 4 di mattina
+  workflow_dispatch: # Permette anche il lancio manuale
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Run scraper
+        run: python scraper.py
+      - name: Upload to Google Drive
+        # Qui useremo un'azione pronta per caricare su Drive
+        uses: Jambo-Software/upload-google-drive@v1.1
+        with:
+          google-source: 'dati_fantacalcio.json'
+          google-drive-id: '${{ secrets.DRIVE_FILE_ID }}'
+          google-service-account-json: '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}'
