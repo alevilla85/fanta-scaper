@@ -1,23 +1,88 @@
 const express = require("express");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 /* =========================
-   LEAGUE STATS
+   CACHE IN MEMORIA
 ========================= */
-app.get("/league/:tournamentId/:seasonId/players", async (req, res) => {
+const playerCache = new Map();
+
+function getCachedPlayer(id) {
+  const c = playerCache.get(id);
+  if (!c) return null;
+  if (Date.now() - c.time > 60 * 60 * 1000) return null; // 1h TTL
+  return c.data;
+}
+
+function setCachedPlayer(id, data) {
+  playerCache.set(id, {
+    data,
+    time: Date.now()
+  });
+}
+
+/* =========================
+   FETCH HELPER
+========================= */
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch error: ${url}`);
+  return res.json();
+}
+
+/* =========================
+   PLAYER FULL ENRICHMENT
+========================= */
+async function getFullPlayer(id, tournamentId, seasonId) {
+
+  const cached = getCachedPlayer(id);
+  if (cached) return cached;
+
+  const [info, stats, attr] = await Promise.all([
+    fetchJSON(`https://www.sofascore.com/api/v1/player/${id}`),
+    fetchJSON(`https://www.sofascore.com/api/v1/player/${id}/statistics/season/${seasonId}/unique-tournament/${tournamentId}`),
+    fetchJSON(`https://www.sofascore.com/api/v1/player/${id}/characteristics`)
+  ]);
+
+  const p = info.player;
+
+  const result = {
+    id,
+    anagrafica: {
+      name: p.name,
+      shortName: p.shortName,
+      nationality: p.country?.name || "",
+      position: p.position || "",
+      height: p.height || "",
+      foot: p.preferredFoot || "",
+      jersey: p.jerseyNumber || "",
+      marketValue: p.proposedMarketValue || ""
+    },
+    attributi: attr || {},
+    statistiche: stats || {}
+  };
+
+  setCachedPlayer(id, result);
+
+  return result;
+}
+
+/* =========================
+   1. LEAGUE (LISTA BASE)
+========================= */
+app.get("/league/:tournamentId/:seasonId", async (req, res) => {
 
   const { tournamentId, seasonId } = req.params;
 
   try {
 
     const url =
-      `https://api.sofascore.com/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/statistics?limit=50&offset=0&accumulation=total&order=-rating`;
+      `https://www.sofascore.com/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/statistics?limit=100&offset=0&accumulation=total&order=-rating`;
 
-    const response = await fetch(url);
-    const json = await response.json();
+    const data = await fetchJSON(url);
 
-    const players = (json.results || []).map(r => ({
+    const players = (data.results || []).map(r => ({
       id: r.player.id,
       name: r.player.name,
       rating: r.rating,
@@ -32,41 +97,7 @@ app.get("/league/:tournamentId/:seasonId/players", async (req, res) => {
 });
 
 /* =========================
-   PLAYER DETAILS
-========================= */
-app.get("/player/:id/details", async (req, res) => {
-
-  const id = req.params.id;
-
-  try {
-
-    const url =
-      `https://api.sofascore.com/api/v1/player/${id}`;
-
-    const response = await fetch(url);
-    const json = await response.json();
-
-    const p = json.player;
-
-    res.json({
-      id: p.id,
-      name: p.name,
-      shortName: p.shortName,
-      nationality: p.country?.name,
-      position: p.position,
-      height: p.height,
-      foot: p.preferredFoot,
-      jersey: p.jerseyNumber,
-      marketValue: p.proposedMarketValue
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/* =========================
-   SYNC ENDPOINT
+   2. SYNC COMPLETO (PER SHEETS)
 ========================= */
 app.get("/sync/league/:tournamentId/:seasonId", async (req, res) => {
 
@@ -75,33 +106,19 @@ app.get("/sync/league/:tournamentId/:seasonId", async (req, res) => {
   try {
 
     const url =
-      `https://api.sofascore.com/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/statistics?limit=50&offset=0&accumulation=total&order=-rating`;
+      `https://www.sofascore.com/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/statistics?limit=50&offset=0&accumulation=total&order=-rating`;
 
-    const response = await fetch(url);
-    const json = await response.json();
+    const data = await fetchJSON(url);
 
-    const results = json.results || [];
+    const players = data.results || [];
 
-    const anagrafica = results.map(r => ({
-      id: r.player.id,
-      name: r.player.name,
-      position: r.player.position || "",
-      nationality: r.player.country?.name || "",
-      height: r.player.height || "",
-      foot: r.player.preferredFoot || "",
-      jersey: r.player.jerseyNumber || "",
-      marketValue: r.player.proposedMarketValue || "",
-      rating: r.rating
-    }));
+    const enriched = await Promise.all(
+      players.map(p =>
+        getFullPlayer(p.player.id, tournamentId, seasonId)
+      )
+    );
 
-    const statistiche = results.map(r => ({
-      id: r.player.id,
-      name: r.player.name,
-      rating: r.rating,
-      stats: r.statistics
-    }));
-
-    res.json({ anagrafica, statistiche });
+    res.json(enriched);
 
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -109,8 +126,24 @@ app.get("/sync/league/:tournamentId/:seasonId", async (req, res) => {
 });
 
 /* =========================
-   START
+   3. SINGLE PLAYER (DEBUG)
+========================= */
+app.get("/player/:id/full", async (req, res) => {
+
+  const { id } = req.params;
+  const { tournamentId = 23, seasonId = 76457 } = req.query;
+
+  try {
+    const player = await getFullPlayer(id, tournamentId, seasonId);
+    res.json(player);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================
+   START SERVER
 ========================= */
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log(`Server running on port ${PORT}`);
 });
