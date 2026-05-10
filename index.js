@@ -26,9 +26,35 @@ function setCachedPlayer(id, data) {
    FETCH HELPER
 ========================= */
 async function fetchJSON(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch error: ${url}`);
-  return res.json();
+
+  try {
+
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        "Accept": "application/json",
+        "Referer": "https://www.sofascore.com/",
+        "Origin": "https://www.sofascore.com"
+      }
+    });
+
+    const text = await res.text();
+
+    console.log("STATUS:", res.status);
+    console.log("URL:", url);
+    console.log("BODY PREVIEW:", text.slice(0, 200));
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${text}`);
+    }
+
+    return JSON.parse(text);
+
+  } catch (err) {
+    console.error("FETCH FAILED:", err.message);
+    throw err;
+  }
 }
 
 /* =========================
