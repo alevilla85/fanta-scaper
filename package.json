@@ -1,16 +1,13 @@
 {
-  "name": "sofascore-api",
+  "name": "fanta-scaper",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "postinstall": "npx playwright install chromium"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "express": "^5.2.1",
-    "playwright": "^1.59.1"
+    "express": "^4.18.0",
+    "playwright": "^1.40.0"
   }
 }
